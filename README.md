@@ -1,6 +1,6 @@
-# LumiaQuickStart
+# LK installer.
 
-A Powershell script to install Developer menu and bootshim onto your Lumia
+A Powershell script to install Developer menu, bootshim and LK onto your Lumia
 
 ## Instructions
 -   Unlock your device with WPinternals
