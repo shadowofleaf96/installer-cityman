@@ -3,8 +3,7 @@
 # Copyright (c) Android4Lumia950
 #
 # Define the warning message
-$warningMessage = @"
-********************************************************************************
+$warningMessage = @" ********************************************************************************
                             WARNING: READ THIS CAREFULLY
 ********************************************************************************
 
@@ -48,10 +47,10 @@ Copy-Item "$PSScriptRoot\DATA\BCD" -Destination "$bcd_file" -Force
 
 Write-Output("Copying bootshim")
 Copy-Item "$PSScriptRoot\DATA\bootshim.efi" -Destination "$bootmgr_efis_location"
-# Copy-Item "$PSScriptRoot\Stage2.efi" -Destination "$efiesp_location"
+Copy-Item "$PSScriptRoot\DATA\Stage2.efi" -Destination "$efiesp_location"
 
 Write-Output("Copying developermenu")
-Copy-Item -Path "$PSScriptRoot\developermenu.efi" -Destination "$bootmgr_efis_location"
+Copy-Item -Path "$PSScriptRoot\DATA\developermenu.efi" -Destination "$bootmgr_efis_location"
 New-Item -ItemType Directory -Path "$bootmgr_efis_location\ui" -Force
 Copy-Item -Path "$PSScriptRoot\ui\*" -Destination "$bootmgr_efis_location\ui"
 
