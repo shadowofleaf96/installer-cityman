@@ -17,4 +17,3 @@ A Powershell script to install Developer menu, bootshim and LK onto your Lumia
 -   Then you will have to sideload the LOS rom of your choice (for now only 18.1 is available).
 -   Then continue with the script, it will reboot you to the bootloader to flash the kernel, (WIP: and modem) then boot you in android.
 -   Enjoy!
--   
