@@ -1,6 +1,6 @@
 #Requires -RunAsAdministrator
 #
-# Copyright (c) Mainline4Lumia
+# Copyright (c) Android4lumia950
 #
 
 param(
