@@ -55,13 +55,12 @@ adb pull backup
 adb reboot bootloader
 fastboot flash recovery $PSScriptRoot\DATA\twrp.img
 fastboot reboot recovery
+adb push ./provision.sh /
+adb shell "bash ./provision.sh"
 
-Write-Output("Sideload LOS then push any key.")
-
+Write-Output("Sideload an Android ROM then push any key.")
 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-adb reboot bootloader
+adb reboot
 
-fastboot flash boot $PSScriptRoot\DATA\los.img
-Write-Output("Booting in Android")
-fastboot reboot
+Write-Output("Booting Android...")
 
