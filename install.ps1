@@ -55,6 +55,8 @@ adb pull backup
 adb reboot bootloader
 fastboot flash recovery $PSScriptRoot\DATA\twrp.img
 fastboot reboot recovery
+Write-Output("Press any key when you ARE in TWRP, again.")
+$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 adb push ./provision.sh /
 adb shell "bash ./provision.sh"
 
