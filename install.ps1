@@ -47,8 +47,8 @@ Write-Host -NoNewLine 'Press any key AFTER you have rebooted into LK2ND...'
 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 Write-Output("Booting TWRP");
 fastboot.exe boot $PSScriptRoot\DATA\twrp.img
-Write-Output("Waiting for device in recovery mode...")
-adb wait-for-device
+Write-Output("Push a key 5-10 seconds after TWRP is loaded...")
+$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 adb push ./partition.sh /
 adb shell "bash ./partition.sh"
 adb pull backup
@@ -56,7 +56,8 @@ adb reboot bootloader
 fastboot flash recovery $PSScriptRoot\DATA\twrp.img
 fastboot flash modem $PSScriptRoot\DATA\modem.img
 fastboot reboot recovery
-adb wait-for-device
+Write-Output("Push a key 5-10 seconds after TWRP is loaded...again")
+$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 adb push ./provision.sh /
 adb shell "bash ./provision.sh"
 
