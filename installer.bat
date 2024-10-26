@@ -59,7 +59,7 @@ echo Booting recovery
 
 :waitforadb
 echo Waiting for device in recovery mode...
-timeout /t 7 /nobreak
+timeout /t 15 /nobreak
 for /f "tokens=1" %%i in ('%~dp0bin\adb devices') do (
     if "%%i" NEQ "List" (
         if "%%i" NEQ "" (
@@ -106,7 +106,8 @@ REM Flashing recovery and modem images
 echo Rebooting to recovery
 %~dp0bin\fastboot reboot recovery
 
-timeout /t 7 /nobreak
+echo Press any key when in recovery...
+pause
 
 
 echo Copying provisioning script
