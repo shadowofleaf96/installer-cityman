@@ -25,6 +25,16 @@ provision()
 {
     extract_wlan_mac
     write_bdaddr
+    provision_modem
+}
+
+provision_modem()
+{
+    dd if=/dev/block/bootdevice/by-name/MODEM_FS1 of=/dev/block/bootdevice/by-name/modemst1
+    dd if=/dev/block/bootdevice/by-name/MODEM_FS2 of=/dev/block/bootdevice/by-name/modemst2
+    dd if=/dev/block/bootdevice/by-name/MODEM_FSC of=/dev/block/bootdevice/by-name/fsc
+    dd if=/dev/block/bootdevice/by-name/MODEM_FSG of=/dev/block/bootdevice/by-name/fsg
+    dd if=/dev/block/bootdevice/by-name/SSD of=/dev/block/bootdevice/by-name/ssd
 }
 
 extract_wlan_mac()
