@@ -17,7 +17,7 @@ for /f "usebackq delims=" %%I in (`powershell %psCommand%`) do set "efiesp_locat
 
 REM Define paths
 set "bcd_file=%efiesp_location%\EFI\Microsoft\BOOT\BCD"
-set "bootmgr_efis_location=%efiesp_location%\Windows\System32\BOOT"
+set "bootmgr_efisp_location=%efiesp_location%\Windows\System32\BOOT"
 
 REM Check if BCD file exists
 IF NOT EXIST "%bcd_file%" (
@@ -29,22 +29,22 @@ echo Replacing BCD
 copy /y "%~dp0DATA\BCD" "%bcd_file%" >nul 2>&1
 
 echo Copying bootshim
-copy /y "%~dp0DATA\bootshim.efi" "%bootmgr_efis_location%" >nul 2>&1
+copy /y "%~dp0DATA\bootshim.efi" "%bootmgr_efisp_location%" >nul 2>&1
 
 copy /y "%~dp0DATA\Stage2.efi" "%efiesp_location%" >nul 2>&1
 
 
 echo Copying developermenu
-copy /y "%~dp0DATA\developermenu.efi" "%bootmgr_efis_location%" >nul 2>&1
+copy /y "%~dp0DATA\developermenu.efi" "%bootmgr_efisp_location%" >nul 2>&1
 
-if not exist "%bootmgr_efis_location%\ui" (
-    md "%bootmgr_efis_location%\ui" >nul 2>&1
+if not exist "%bootmgr_efisp_location%\ui" (
+    md "%bootmgr_efisp_location%\ui" >nul 2>&1
     IF ERRORLEVEL 1 (
         echo Failed to create ui directory
         exit /b 1
     )
 )
-copy /y "%~dp0ui\*" "%bootmgr_efis_location%\ui\" >nul 2>&1
+copy /y "%~dp0ui\*" "%bootmgr_efisp_location%\ui\" >nul 2>&1
 
 
 echo Copying LK2ND
@@ -90,10 +90,10 @@ set "current_date=-%datetime:~6,2%.%datetime:~4,2%.%datetime:~0,4%_%datetime:~8,
 
 rem Create the backup folder with the current date
 set "backup_folder=backup%current_date%"
-mkdir "%backup_folder%"
 
 echo Pulling backup
-%~dp0bin\adb pull /backup "%backup_folder%" >nul 2>&1
+%~dp0bin\adb pull /backup %~dp0 >nul 2>&1
+PowerShell -Command "mv '%~dp0backup' '%backup_folder%' "
 
 echo Rebooting to bootloader
 %~dp0bin\adb reboot bootloader
