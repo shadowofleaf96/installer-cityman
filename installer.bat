@@ -115,10 +115,7 @@ echo Copying provisioning script
 
 echo Running provisioning script
 %~dp0bin\adb shell "bash /provision.sh"
-
-echo Sideload an Android ROM then press any key.
-pause
-
 %~dp0bin\adb reboot
 
-echo Booting Android...
+echo Now flash system.img and vendor.img
+exit
