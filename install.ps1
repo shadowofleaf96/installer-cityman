@@ -61,9 +61,7 @@ $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 adb push ./provision.sh /
 adb shell "bash ./provision.sh"
 
-Write-Output("Sideload an Android ROM then push any key.")
-$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 adb reboot
 
-Write-Output("Booting Android...")
+Write-Output("Now flash system.img and vendor.img")
 
