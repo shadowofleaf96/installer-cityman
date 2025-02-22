@@ -59,7 +59,7 @@ echo Booting recovery
 
 :waitforadb
 echo Waiting for device in recovery mode...
-timeout /t 15 /nobreak
+timeout /t 30 /nobreak
 for /f "tokens=1" %%i in ('%~dp0bin\adb devices') do (
     if "%%i" NEQ "List" (
         if "%%i" NEQ "" (
