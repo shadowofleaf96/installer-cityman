@@ -103,9 +103,9 @@ partition()
                                   "userdata"   "100%"     "ext4");
 
     for ((i=0; i<${#androidPartitions[@]}; i+=3)); do
-        last_line=$(parted /dev/block/mmcblk0 unit MiB print | tail -n 2)
+        last_line=$(parted /dev/block/mmcblk0 unit MiB print | grep -E '^\s*[0-9]' | tail -n 1)
 
-        # Extract the End size (second column)
+        # Extract the End size (third column, e.g. "1234MiB")
         end_size=$(echo "$last_line" | awk '{print $3}')
 
         # Use the extracted End size for further processing
