@@ -5,7 +5,7 @@ A Powershell script to install Developer menu, bootshim and LK onto your Lumia
 
 ## Instructions
 -   Unlock your device with WPinternals.
--   Ensure you have all the required files in the `DATA\` directory (`BCD`, `bootshim.efi`, `Stage2.efi`, `developermenu.efi`, `emmc_appsboot.mbn`, `twrp.img`, `modem.img`, `boot.img`, `system.img`, and `vendor.img`).
+-   Ensure you have all the required files in the `DATA\` directory (`BCD`, `bootshim.efi`, `Stage2.efi`, `developermenu.efi`, `emmc_appsboot.mbn`, `twrp.img`, `modem.img`, `boot.img`).
 -   From WPinternals, reboot to mass storage mode (you might want to make a Win32DiskImager backup).
 -   Clone this repo.
 -   Run `installer.bat` as Administrator.
