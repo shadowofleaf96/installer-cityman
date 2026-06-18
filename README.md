@@ -5,7 +5,7 @@ A Powershell script to install Developer menu, bootshim and LK onto your Lumia
 
 ## Instructions
 -   Unlock your device with WPinternals.
--   Ensure you have all the required files in the `DATA\` directory (`BCD`, `bootshim.efi`, `Stage2.efi`, `developermenu.efi`, `emmc_appsboot.mbn`, `twrp.img`, `modem.img`, `boot.img`).
+-   Ensure you have all the required base files in the `DATA\` directory (`BCD`, `bootshim.efi`, `Stage2.efi`, `developermenu.efi`, `emmc_appsboot.mbn`, `twrp.img`, `modem.img`). For the LineageOS installation, you must either provide `system.img`, `vendor.img`, and `boot.img` in the `DATA\` directory, OR place a LineageOS flashable zip (e.g., `lineage-18.1-*.zip`) in the script's root directory to use the ADB sideload method.
 -   From WPinternals, reboot to mass storage mode (you might want to make a Win32DiskImager backup).
 -   Clone this repo.
 -   Run `installer.bat` as Administrator.
@@ -28,6 +28,7 @@ This repository includes several utility scripts to assist with ROM and firmware
 - **LK Updated**: Updated `lk.bin` and `bootshim.efi` to the latest versions.
 - **TWRP Updated**: Updated `twrp.img` to a version that includes `parted` for proper partitioning support.
 - **Installer Improvements**:
+    - **Sideload Fallback**: Added support for ADB sideloading a LineageOS flashable zip if `system.img` and `vendor.img` are not provided.
     - Improved error handling and increased timeouts for various operations.
     - Added support for new partition sizes and layout adjustments.
     - Added `adb wait-for-devices` checks to ensure the device is detected before proceeding.

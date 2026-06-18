@@ -15,7 +15,7 @@
 ::    4. Backup existing partitions (timestamped)
 ::    5. Flash TWRP recovery and modem firmware
 ::    6. Provision the Android partition layout
-::    7. Flash LineageOS system.img and vendor.img
+::    7. Flash LineageOS system/vendor imgs (or ADB sideload zip)
 ::
 ::  Requirements:
 ::    - Windows 10/11 with admin privileges
@@ -31,8 +31,10 @@
 ::    DATA\emmc_appsboot.mbn - LK2ND bootloader
 ::    DATA\twrp.img          - TWRP recovery image
 ::    DATA\modem.img         - Modem firmware
-::    DATA\system.img        - LineageOS 18.1 system image
-::    DATA\vendor.img        - LineageOS 18.1 vendor image
+::    DATA\system.img        - LineageOS system image (Optional if sideloading zip)
+::    DATA\vendor.img        - LineageOS vendor image (Optional if sideloading zip)
+::    DATA\boot.img          - LineageOS boot image (Optional if sideloading zip)
+::    lineage-18.1-*.zip     - Flashable zip in script dir (Fallback if imgs are missing)
 ::    partition.sh           - eMMC repartition script
 ::    provision.sh           - Android partition provisioning
 ::    ui\*                   - Developer menu UI assets
@@ -76,8 +78,25 @@ echo [*] Running pre-flight checks...
 echo [INFO] Running pre-flight checks >> "%LOGFILE%"
 set "preflight_ok=1"
 
+set "use_sideload=0"
+set "sideload_zip="
+if not exist "%~dp0DATA\system.img" if not exist "%~dp0DATA\vendor.img" (
+    for %%Z in ("%~dp0lineage-18.1*.zip") do (
+        set "use_sideload=1"
+        set "sideload_zip=%%Z"
+    )
+)
+
 REM -- Required DATA files --
-for %%F in (BCD bootshim.efi Stage2.efi developermenu.efi emmc_appsboot.mbn twrp.img modem.img boot.img system.img vendor.img) do (
+set "data_files=BCD bootshim.efi Stage2.efi developermenu.efi emmc_appsboot.mbn twrp.img modem.img"
+if "!use_sideload!"=="0" (
+    set "data_files=!data_files! boot.img system.img vendor.img"
+) else (
+    echo [INFO] system.img and vendor.img not found, but LineageOS zip found. Will use adb sideload.
+    echo [INFO] LineageOS zip found for sideload: !sideload_zip! >> "%LOGFILE%"
+)
+
+for %%F in (!data_files!) do (
     if not exist "%~dp0DATA\%%F" (
         echo  [ERROR] MISSING: DATA\%%F
         echo [ERROR] MISSING: DATA\%%F >> "%LOGFILE%"
@@ -447,8 +466,13 @@ echo  --- PHASE 6: Flash LineageOS 18.1 images ---
 echo.
 
 :: Confirmation before flashing OS images
-echo  [WARNING] This will flash LineageOS 18.1 system and vendor
-echo            images to the device. This is irreversible.
+if "!use_sideload!"=="1" (
+    echo  [WARNING] This will sideload LineageOS 18.1 zip
+    echo            to the device. This is irreversible.
+) else (
+    echo  [WARNING] This will flash LineageOS 18.1 system, vendor, and boot
+    echo            images to the device. This is irreversible.
+)
 echo.
 set /p "confirm_flash=  Continue with flashing LineageOS? (Y/N): "
 if /i "!confirm_flash!" NEQ "Y" (
@@ -456,37 +480,73 @@ if /i "!confirm_flash!" NEQ "Y" (
     exit /b 0
 )
 
-echo Rebooting to bootloader for flashing
-%~dp0bin\adb reboot bootloader
+if "!use_sideload!"=="1" (
+    echo.
+    set "sideload_found=0"
+    for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+        if "%%i"=="sideload" set "sideload_found=1"
+    )
+    if "!sideload_found!"=="1" (
+        echo Device is already in sideload mode.
+    ) else (
+        echo Starting TWRP sideload mode...
+        %~dp0bin\adb shell twrp sideload >nul 2>&1
+        
+        echo.
+        echo Waiting for device to enter sideload mode...
+        :waitsideload
+        timeout /t 5 /nobreak >nul
+        set "sideload_found=0"
+        for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+            if "%%i"=="sideload" set "sideload_found=1"
+        )
+        if "!sideload_found!"=="0" (
+            echo   Device not in sideload mode yet.
+            echo   If it's stuck, please manually start ADB Sideload from TWRP Advanced menu!
+            goto waitsideload
+        )
+        echo [OK] Device is in sideload mode!
+    )
 
-echo.
-echo Waiting for device in fastboot/bootloader mode...
-echo.
+    echo Sideloading LineageOS zip ^(this will take a while^)...
+    %~dp0bin\adb sideload "!sideload_zip!"
+    echo [INFO] Sideloaded !sideload_zip! >> "%LOGFILE%"
 
-:waitfb2
-%~dp0bin\fastboot devices 2>nul | findstr /R /C:"fastboot" >nul 2>&1
-IF ERRORLEVEL 1 (
-    echo   Fastboot device not found, retrying in 5 seconds...
-    timeout /t 5 /nobreak >nul
-    goto waitfb2
+    echo Rebooting device
+    %~dp0bin\adb reboot
+) else (
+    echo Rebooting to bootloader for flashing
+    %~dp0bin\adb reboot bootloader
+
+    echo.
+    echo Waiting for device in fastboot/bootloader mode...
+    echo.
+
+    :waitfb2
+    %~dp0bin\fastboot devices 2>nul | findstr /R /C:"fastboot" >nul 2>&1
+    IF ERRORLEVEL 1 (
+        echo   Fastboot device not found, retrying in 5 seconds...
+        timeout /t 5 /nobreak >nul
+        goto waitfb2
+    )
+    echo [OK] Fastboot device detected!
+    echo [INFO] Fastboot device detected for Phase 6 >> "%LOGFILE%"
+
+    echo Flashing system.img ^(this may take a while^)...
+    %~dp0bin\fastboot flash system "%~dp0DATA\system.img"
+    echo [INFO] system.img flash command sent >> "%LOGFILE%"
+
+    echo Flashing vendor.img...
+    %~dp0bin\fastboot flash vendor "%~dp0DATA\vendor.img"
+    echo [INFO] vendor.img flash command sent >> "%LOGFILE%"
+
+    echo Flashing boot.img...
+    %~dp0bin\fastboot flash boot "%~dp0DATA\boot.img"
+    echo [INFO] boot.img flash command sent >> "%LOGFILE%"
+
+    echo Rebooting device
+    %~dp0bin\fastboot reboot
 )
-echo [OK] Fastboot device detected!
-echo [INFO] Fastboot device detected for Phase 6 >> "%LOGFILE%"
-
-echo Flashing system.img (this may take a while)...
-%~dp0bin\fastboot flash system "%~dp0DATA\system.img"
-echo [INFO] system.img flash command sent >> "%LOGFILE%"
-
-echo Flashing vendor.img...
-%~dp0bin\fastboot flash vendor "%~dp0DATA\vendor.img"
-echo [INFO] vendor.img flash command sent >> "%LOGFILE%"
-
-echo Flashing boot.img...
-%~dp0bin\fastboot flash boot "%~dp0DATA\boot.img"
-echo [INFO] boot.img flash command sent >> "%LOGFILE%"
-
-echo Rebooting device
-%~dp0bin\fastboot reboot
 
 REM ============================================================
 REM  Done!
