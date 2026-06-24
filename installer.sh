@@ -536,7 +536,7 @@ phase7_rescue() {
     echo " --- PHASE 7: Rescue Bootloop (Mass Storage Mode) ---"
     echo ""
     echo " Instructions:"
-    echo " 1. Force reboot your Lumia (Hold Power + Vol Down for 10s until vibration)."
+    echo " 1. Force reboot your Lumia (Hold Power + Volume Down for 10s until vibration)."
     echo " 2. As soon as it vibrates, hold the Camera button (or Vol Up on some UIs)."
     echo " 3. Select \"Mass Storage Mode\" in the Developer Menu."
     echo " 4. Connect the phone to your PC via USB."
