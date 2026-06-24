@@ -50,7 +50,7 @@ echo "" >> "$LOGFILE"
 
 echo ""
 echo " ============================================================"
-echo "  LineageOS 18.1 Installer for Lumia 950 XL (Cityman) - Ubuntu 24.04"
+echo "  LineageOS 18.1 Installer for Lumia 950 XL (Cityman)"
 echo " ============================================================"
 echo "  Log file: $LOGFILE"
 echo ""
@@ -87,7 +87,7 @@ if [ ! -f "${BASE_DIR}/DATA/system.img" ] && [ ! -f "${BASE_DIR}/DATA/vendor.img
 fi
 
 # -- Required DATA files --
-data_files=("BCD" "bootshim.efi" "Stage2.efi" "developermenu.efi" "emmc_appsboot.mbn" "twrp.img" "modem.img")
+data_files=("BCD" "bootshim.efi" "Stage2.efi" "developermenu.efi" "emmc_appsboot.mbn" "twrp.img" "modem.img" "PLAT.img")
 if [ "$use_sideload" -eq 0 ]; then
     data_files+=("boot.img" "system.img" "vendor.img")
 else
@@ -156,8 +156,9 @@ echo "   3. Repartition done, continue from backup + flash"
 echo "   4. Phone is in bootloader, flash recovery + modem"
 echo "   5. Recovery + modem flashed, run provisioning"
 echo "   6. Provisioning done, flash LineageOS images only"
+echo "   7. Rescue bootloop via Mass Storage Mode (Flash boot/recovery)"
 echo ""
-read -p " Enter choice (1-6): " start_phase
+read -p "  Enter choice (1-7): " start_phase
 
 # ============================================================
 #  Phases
@@ -195,7 +196,7 @@ phase1_efiesp() {
     echo " [WARNING] This will overwrite the BCD and UEFI boot files"
     echo "           on the EFIESP partition at: $efiesp_location"
     echo ""
-    read -p " Are you sure you want to continue? (Y/N): " confirm_efiesp
+    read -p "  Are you sure you want to continue? (Y/N): " confirm_efiesp
     if [[ ! "$confirm_efiesp" =~ ^[Yy]$ ]]; then
         echo "Operation cancelled by user."
         exit 0
@@ -251,6 +252,8 @@ phase1_efiesp() {
 
     echo ""
     echo "[OK] EFIESP patching complete!"
+
+    echo ""
     echo "    Reboot your phone and you should be prompted to LK2ND."
     echo "    Press Enter when ready to continue to Phase 2..."
     echo "[INFO] EFIESP patching complete" >> "$LOGFILE"
@@ -297,13 +300,29 @@ waitforadb() {
 }
 
 insiderecovery() {
+    if [ -f "${BASE_DIR}/DATA/PLAT.img" ]; then
+        echo "Flashing PLAT.img Boot Logo via TWRP..."
+        if ! $ADB push "${BASE_DIR}/DATA/PLAT.img" /tmp/PLAT.img >> "$LOGFILE" 2>&1; then
+            echo " [WARNING] Failed to push PLAT.img to TWRP."
+            echo "[WARNING] Failed to push PLAT.img" >> "$LOGFILE"
+        else
+            if ! $ADB shell "if [ -e /dev/block/bootdevice/by-name/PLAT ]; then dd if=/tmp/PLAT.img of=/dev/block/bootdevice/by-name/PLAT; elif [ -e /dev/block/bootdevice/by-name/plat ]; then dd if=/tmp/PLAT.img of=/dev/block/bootdevice/by-name/plat; else exit 1; fi" >> "$LOGFILE" 2>&1; then
+                echo " [WARNING] Failed to flash PLAT.img. Partition not found in TWRP."
+                echo "[WARNING] Failed to flash PLAT.img via dd" >> "$LOGFILE"
+            else
+                echo "[OK] Boot logo PLAT.img flashed successfully!"
+                echo "[INFO] Flashed PLAT.img via dd" >> "$LOGFILE"
+            fi
+        fi
+    fi
+
     echo ""
     echo " [WARNING] The next step will REPARTITION the eMMC storage."
     echo "           This is a DESTRUCTIVE operation. Existing data on"
     echo "           the Android partitions will be erased."
     echo "           A backup will be taken before flashing."
     echo ""
-    read -p " Continue with repartitioning? (Y/N): " confirm_partition
+    read -p "  Continue with repartitioning? (Y/N): " confirm_partition
     if [[ ! "$confirm_partition" =~ ^[Yy]$ ]]; then
         echo "Operation cancelled by user."
         exit 0
@@ -438,7 +457,7 @@ phase6_lineageos() {
         echo "           images to the device. This is irreversible."
     fi
     echo ""
-    read -p " Continue with flashing LineageOS? (Y/N): " confirm_flash
+    read -p "  Continue with flashing LineageOS? (Y/N): " confirm_flash
     if [[ ! "$confirm_flash" =~ ^[Yy]$ ]]; then
         echo "Operation cancelled by user."
         exit 0
@@ -512,6 +531,40 @@ phase6_lineageos() {
     fi
 }
 
+phase7_rescue() {
+    echo ""
+    echo " --- PHASE 7: Rescue Bootloop (Mass Storage Mode) ---"
+    echo ""
+    echo " Instructions:"
+    echo " 1. Force reboot your Lumia (Hold Power + Vol Down for 10s until vibration)."
+    echo " 2. As soon as it vibrates, hold the Camera button (or Vol Up on some UIs)."
+    echo " 3. Select \"Mass Storage Mode\" in the Developer Menu."
+    echo " 4. Connect the phone to your PC via USB."
+    echo ""
+    echo " What do you want to flash to rescue the device?"
+    echo "   1. TWRP Recovery (Flash twrp.img to boot partition) [Recommended]"
+    echo "   2. LineageOS Boot (Flash boot.img to boot partition)"
+    echo ""
+    read -p "  Enter choice (1-2): " rescue_choice
+
+    rescue_img=""
+    if [ "$rescue_choice" == "1" ]; then rescue_img="twrp.img"; fi
+    if [ "$rescue_choice" == "2" ]; then rescue_img="boot.img"; fi
+
+    if [ -z "$rescue_img" ]; then
+        echo "Invalid choice."
+        exit 1
+    fi
+
+    echo ""
+    echo "Launching bash rescue script..."
+    bash "${BASE_DIR}/rescue.sh" "$rescue_img" "boot"
+
+    echo ""
+    echo "Rescue operation finished. Check the output above for success/failure."
+    exit 0
+}
+
 # ============================================================
 #  Execution Flow based on Phase
 # ============================================================
@@ -548,6 +601,9 @@ case "$start_phase" in
         ;;
     6)
         phase6_lineageos
+        ;;
+    7)
+        phase7_rescue
         ;;
     *)
         echo "Invalid choice. Exiting."

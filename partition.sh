@@ -98,7 +98,7 @@ partition()
                                   "ssd"        "2MiB"     "ext4"
                                   "modemst1"   "2MiB"     "ext4"
                                   "modemst2"   "2MiB"     "ext4"
-                                  "vendor"     "260MiB"   "ext4"
+                                  "vendor"     "384MiB"   "ext4"
                                   "system"     "3072MiB"  "ext4"
                                   "userdata"   "100%"     "ext4");
 

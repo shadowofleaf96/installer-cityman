@@ -31,6 +31,7 @@
 ::    DATA\emmc_appsboot.mbn - LK2ND bootloader
 ::    DATA\twrp.img          - TWRP recovery image
 ::    DATA\modem.img         - Modem firmware
+::    DATA\PLAT.img          - Boot logo partition image (FAT12)
 ::    DATA\system.img        - LineageOS system image (Optional if sideloading zip)
 ::    DATA\vendor.img        - LineageOS vendor image (Optional if sideloading zip)
 ::    DATA\boot.img          - LineageOS boot image (Optional if sideloading zip)
@@ -72,6 +73,23 @@ echo   Log file: %LOGFILE%
 echo.
 
 REM ============================================================
+REM  Phase selection menu
+REM ============================================================
+echo  Select where to start:
+echo.
+echo    1. Full install (start from the beginning)
+echo    2. Phone is already in TWRP (skip EFIESP + fastboot boot)
+echo    3. Repartition done, continue from backup + flash
+echo    4. Phone is in bootloader, flash recovery + modem
+echo    5. Recovery + modem flashed, run provisioning
+echo    6. Provisioning done, flash LineageOS images only
+echo    7. Rescue bootloop via Mass Storage Mode (Flash boot/recovery)
+echo.
+set /p "start_phase=  Enter choice (1-7): "
+
+if "!start_phase!"=="7" goto phase7_rescue
+
+REM ============================================================
 REM  Pre-flight checks: verify all required files exist
 REM ============================================================
 echo [*] Running pre-flight checks...
@@ -88,7 +106,7 @@ if not exist "%~dp0DATA\system.img" if not exist "%~dp0DATA\vendor.img" (
 )
 
 REM -- Required DATA files --
-set "data_files=BCD bootshim.efi Stage2.efi developermenu.efi emmc_appsboot.mbn twrp.img modem.img"
+set "data_files=BCD bootshim.efi Stage2.efi developermenu.efi emmc_appsboot.mbn twrp.img modem.img PLAT.img"
 if "!use_sideload!"=="0" (
     set "data_files=!data_files! boot.img system.img vendor.img"
 ) else (
@@ -141,20 +159,6 @@ echo [OK] All required files found.
 echo [INFO] Pre-flight check passed >> "%LOGFILE%"
 echo.
 
-REM ============================================================
-REM  Phase selection menu
-REM ============================================================
-echo  Select where to start:
-echo.
-echo    1. Full install (start from the beginning)
-echo    2. Phone is already in TWRP (skip EFIESP + fastboot boot)
-echo    3. Repartition done, continue from backup + flash
-echo    4. Phone is in bootloader, flash recovery + modem
-echo    5. Recovery + modem flashed, run provisioning
-echo    6. Provisioning done, flash LineageOS images only
-echo.
-set /p "start_phase=  Enter choice (1-6): "
-
 if "!start_phase!"=="2" goto phase2_adb
 if "!start_phase!"=="3" goto phase3_backup
 if "!start_phase!"=="4" goto phase4_flash
@@ -176,6 +180,7 @@ for /f "usebackq delims=" %%I in (`powershell %psCommand%`) do set "efiesp_locat
 if not defined efiesp_location (
     echo  [ERROR] No EFIESP directory selected. Aborting.
     echo [ERROR] No EFIESP directory selected >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] EFIESP directory: %efiesp_location% >> "%LOGFILE%"
@@ -188,6 +193,7 @@ REM Check if BCD file exists on the device
 IF NOT EXIST "%bcd_file%" (
     echo  [ERROR] BCD file not found at %bcd_file% - make sure it's the right path
     echo [ERROR] BCD not found at %bcd_file% >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
@@ -203,61 +209,74 @@ if /i "!confirm_efiesp!" NEQ "Y" (
 )
 
 echo Replacing BCD
-copy /y "%~dp0DATA\BCD" "%bcd_file%" >nul 2>&1
+copy /y "%~dp0DATA\BCD" "%bcd_file%" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy BCD to %bcd_file%
     echo [ERROR] Failed to copy BCD >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
 echo Copying bootshim
-copy /y "%~dp0DATA\bootshim.efi" "%bootmgr_efisp_location%" >nul 2>&1
+copy /y "%~dp0DATA\bootshim.efi" "%bootmgr_efisp_location%" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy bootshim.efi
     echo [ERROR] Failed to copy bootshim.efi >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
-copy /y "%~dp0DATA\Stage2.efi" "%efiesp_location%" >nul 2>&1
+copy /y "%~dp0DATA\Stage2.efi" "%efiesp_location%" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy Stage2.efi
     echo [ERROR] Failed to copy Stage2.efi >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
 echo Copying developermenu
-copy /y "%~dp0DATA\developermenu.efi" "%bootmgr_efisp_location%" >nul 2>&1
+copy /y "%~dp0DATA\developermenu.efi" "%bootmgr_efisp_location%" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy developermenu.efi
     echo [ERROR] Failed to copy developermenu.efi >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
 if not exist "%bootmgr_efisp_location%\ui" (
-    md "%bootmgr_efisp_location%\ui" >nul 2>&1
+    md "%bootmgr_efisp_location%\ui" >> "%LOGFILE%" 2>&1
     IF ERRORLEVEL 1 (
         echo  [ERROR] Failed to create ui directory
         echo [ERROR] Failed to create ui directory >> "%LOGFILE%"
-        exit /b 1
+        pause
+    exit /b 1
     )
 )
-copy /y "%~dp0ui\*" "%bootmgr_efisp_location%\ui\" >nul 2>&1
+copy /y "%~dp0ui\*" "%bootmgr_efisp_location%\ui\" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy ui files
     echo [ERROR] Failed to copy ui files >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 
 echo Copying LK2ND
-copy /y "%~dp0DATA\emmc_appsboot.mbn" "%efiesp_location%" >nul 2>&1
+copy /y "%~dp0DATA\emmc_appsboot.mbn" "%efiesp_location%" >> "%LOGFILE%" 2>&1
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to copy emmc_appsboot.mbn
     echo [ERROR] Failed to copy emmc_appsboot.mbn >> "%LOGFILE%"
+    echo  [INFO] Please check "%LOGFILE%" for more details.
+    pause
     exit /b 1
 )
 
 echo.
 echo [OK] EFIESP patching complete!
+
+REM Removed Phase 1.5: PLAT partition is FAT12 and hard to mount on Windows.
+REM Instead, PLAT.img will be flashed via fastboot in Phase 2.
+
+echo.
 echo     Reboot your phone and you should be prompted to LK2ND.
 echo     Press any key when ready to continue to Phase 2...
 echo [INFO] EFIESP patching complete >> "%LOGFILE%"
@@ -270,11 +289,13 @@ echo.
 echo  --- PHASE 2: Boot TWRP recovery and repartition ---
 echo.
 
+
 echo Booting recovery via fastboot
 %~dp0bin\fastboot boot "%~dp0DATA\twrp.img"
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to fastboot boot twrp.img
     echo [ERROR] Failed to fastboot boot twrp.img >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] Fastboot boot twrp.img sent >> "%LOGFILE%"
@@ -306,6 +327,24 @@ goto waitforadb
 
 :insiderecovery
 
+if exist "%~dp0DATA\PLAT.img" (
+    echo Flashing PLAT.img Boot Logo via TWRP...
+    %~dp0bin\adb push "%~dp0DATA\PLAT.img" /tmp/PLAT.img >> "%LOGFILE%" 2>&1
+    IF ERRORLEVEL 1 (
+        echo  [WARNING] Failed to push PLAT.img to TWRP.
+        echo [WARNING] Failed to push PLAT.img >> "%LOGFILE%"
+    ) ELSE (
+        %~dp0bin\adb shell "if [ -e /dev/block/bootdevice/by-name/PLAT ]; then dd if=/tmp/PLAT.img of=/dev/block/bootdevice/by-name/PLAT; elif [ -e /dev/block/bootdevice/by-name/plat ]; then dd if=/tmp/PLAT.img of=/dev/block/bootdevice/by-name/plat; else exit 1; fi" >> "%LOGFILE%" 2>&1
+        IF ERRORLEVEL 1 (
+            echo  [WARNING] Failed to flash PLAT.img. Partition not found in TWRP.
+            echo [WARNING] Failed to flash PLAT.img via dd >> "%LOGFILE%"
+        ) ELSE (
+            echo [OK] Boot logo PLAT.img flashed successfully!
+            echo [INFO] Flashed PLAT.img via dd >> "%LOGFILE%"
+        )
+    )
+)
+
 :: Confirmation before destructive partitioning
 echo.
 echo  [WARNING] The next step will REPARTITION the eMMC storage.
@@ -325,6 +364,7 @@ IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to push partition.sh to device
     echo  [!!] Make sure the device is still in TWRP recovery.
     echo [ERROR] Failed to push partition.sh >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] partition.sh pushed >> "%LOGFILE%"
@@ -335,6 +375,7 @@ IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to run partition.sh on device
     echo  [!!] Check the device screen for any error messages.
     echo [ERROR] Failed to run partition.sh >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] partition.sh executed successfully >> "%LOGFILE%"
@@ -444,6 +485,7 @@ echo Copying provisioning script
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to push provision.sh to device
     echo [ERROR] Failed to push provision.sh >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] provision.sh pushed >> "%LOGFILE%"
@@ -453,6 +495,7 @@ echo Running provisioning script
 IF ERRORLEVEL 1 (
     echo  [ERROR] Failed to run provision.sh on device
     echo [ERROR] Failed to run provision.sh >> "%LOGFILE%"
+    pause
     exit /b 1
 )
 echo [INFO] provision.sh executed successfully >> "%LOGFILE%"
@@ -511,11 +554,9 @@ if "!use_sideload!"=="1" (
     echo Sideloading LineageOS zip ^(this will take a while^)...
     %~dp0bin\adb sideload "!sideload_zip!"
     echo [INFO] Sideloaded !sideload_zip! >> "%LOGFILE%"
-
-    echo Rebooting device
-    %~dp0bin\adb reboot
+    
 ) else (
-    echo Rebooting to bootloader for flashing
+    echo Rebooting to bootloader for flashing system/vendor...
     %~dp0bin\adb reboot bootloader
 
     echo.
@@ -543,10 +584,51 @@ if "!use_sideload!"=="1" (
     echo Flashing boot.img...
     %~dp0bin\fastboot flash boot "%~dp0DATA\boot.img"
     echo [INFO] boot.img flash command sent >> "%LOGFILE%"
-
-    echo Rebooting device
-    %~dp0bin\fastboot reboot
 )
+
+echo Rebooting device
+%~dp0bin\adb reboot 
+goto done_installation
+
+REM ============================================================
+REM  PHASE 7: Rescue Bootloop (Mass Storage Mode)
+REM ============================================================
+:phase7_rescue
+echo.
+echo  --- PHASE 7: Rescue Bootloop (Mass Storage Mode) ---
+echo.
+echo  Instructions:
+echo  1. Force reboot your Lumia (Hold Power + Vol Down for 10s until vibration).
+echo  2. As soon as it vibrates, hold the Camera button (or Vol Up on some UIs).
+echo  3. Select "Mass Storage Mode" in the Developer Menu.
+echo  4. Connect the phone to your PC via USB.
+echo.
+echo  What do you want to flash to rescue the device?
+echo    1. TWRP Recovery (Flash twrp.img to boot partition) [Recommended]
+echo    2. LineageOS Boot (Flash boot.img to boot partition)
+echo.
+set /p "rescue_choice=  Enter choice (1-2): "
+
+set "rescue_img="
+if "!rescue_choice!"=="1" set "rescue_img=twrp.img"
+if "!rescue_choice!"=="2" set "rescue_img=boot.img"
+
+if "!rescue_img!"=="" (
+    echo Invalid choice.
+    pause
+    exit /b 1
+)
+
+echo.
+echo Launching PowerShell rescue script...
+PowerShell -NoProfile -ExecutionPolicy Bypass -File "%~dp0rescue.ps1" -ImageName "!rescue_img!" -PartitionName "boot"
+
+echo.
+echo Rescue operation finished. Check the PowerShell window for success/failure.
+pause
+exit /b 0
+
+:done_installation
 
 REM ============================================================
 REM  Done!
