@@ -98,14 +98,24 @@ partition()
                                   "ssd"        "2MiB"     "ext4"
                                   "modemst1"   "2MiB"     "ext4"
                                   "modemst2"   "2MiB"     "ext4"
+<<<<<<< HEAD
                                   "vendor"     "384MiB"   "ext4"
+=======
+                                  "vendor"     "260MiB"   "ext4"
+>>>>>>> 1467d24 (Add files)
                                   "system"     "3072MiB"  "ext4"
                                   "userdata"   "100%"     "ext4");
 
     for ((i=0; i<${#androidPartitions[@]}; i+=3)); do
+<<<<<<< HEAD
         last_line=$(parted /dev/block/mmcblk0 unit MiB print | grep -E '^\s*[0-9]' | tail -n 1)
 
         # Extract the End size (third column, e.g. "1234MiB")
+=======
+        last_line=$(parted /dev/block/mmcblk0 unit MiB print | tail -n 2)
+
+        # Extract the End size (second column)
+>>>>>>> 1467d24 (Add files)
         end_size=$(echo "$last_line" | awk '{print $3}')
 
         # Use the extracted End size for further processing

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # LK installer.
 
 A Powershell script to install Developer menu, bootshim and LK onto your Lumia
@@ -32,3 +33,17 @@ This repository includes several utility scripts to assist with ROM and firmware
     - Improved error handling and increased timeouts for various operations.
     - Added support for new partition sizes and layout adjustments.
     - Added `adb wait-for-devices` checks to ensure the device is detected before proceeding.
+=======
+# LumiaQuickStart
+
+A Powershell script to install Developer menu and bootshim onto your Lumia
+
+## Instructions
+-   Unlock your device with WPinternals
+-   From WPinternals, reboot to mass storage mode
+-   Clone this repo
+-   Run install.ps1 as administrator
+-   Provide the path to EFIESP (Windows might also have mounted it inside MainOS)
+-   Unmount mass storage
+-   Reboot the device (keep pressed power key)
+>>>>>>> 1467d24 (Add files)
