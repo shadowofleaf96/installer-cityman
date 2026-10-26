@@ -170,6 +170,18 @@ REM  PHASE 1: Patch EFIESP partition
 REM ============================================================
 echo  --- PHASE 1: Patch EFIESP partition ---
 echo.
+echo  The EFIESP partition is only accessible in Mass Storage Mode.
+echo  Please make sure your Lumia 950 XL is in Mass Storage Mode:
+echo.
+echo    1. Force reboot your Lumia (Hold Power + Vol Down for 10s until vibration).
+echo    2. As soon as it vibrates, hold the Camera button (or Vol Up on some UIs).
+echo    3. Select "Mass Storage Mode" in the Developer Menu.
+echo    4. Connect the phone to your PC via USB.
+echo    5. The phone's partitions (including EFIESP) should appear as drive letters.
+echo.
+echo  Press any key when the phone is in Mass Storage Mode and EFIESP is mounted...
+pause >nul
+echo.
 
 :: Prompt for EFIESP directory
 set "psCommand="(new-object -COM 'Shell.Application')^

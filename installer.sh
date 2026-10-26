@@ -168,6 +168,17 @@ phase1_efiesp() {
     echo ""
     echo " --- PHASE 1: Patch EFIESP partition ---"
     echo ""
+    echo " The EFIESP partition is only accessible in Mass Storage Mode."
+    echo " Please make sure your Lumia 950 XL is in Mass Storage Mode:"
+    echo ""
+    echo "   1. Force reboot your Lumia (Hold Power + Volume Down for 10s until vibration)."
+    echo "   2. As soon as it vibrates, hold the Camera button (or Vol Up on some UIs)."
+    echo "   3. Select \"Mass Storage Mode\" in the Developer Menu."
+    echo "   4. Connect the phone to your PC via USB."
+    echo "   5. The phone's partitions (including EFIESP) should appear as mounted drives."
+    echo ""
+    read -p "  Press Enter when the phone is in Mass Storage Mode and EFIESP is mounted..."
+    echo ""
     
     # Try to use a GUI folder picker if available, otherwise fallback to terminal input
     if command -v zenity >/dev/null 2>&1 && [ -n "$DISPLAY" ]; then
