@@ -15,7 +15,8 @@ Automated scripts (Windows Batch and Linux Bash) to install Developer Menu, boot
    - `twrp.img` (Updated TWRP recovery with latest kernel)
    - `modem.img` (70MB modem firmware partition image)
    - `PLAT.img` (Optional: Custom boot logo partition image) or `logo1.png`
-   - **ROM Files**: Either provide `system.img`, `vendor.img`, and `boot.img` in `DATA\`, **OR** place a LineageOS flashable zip (e.g., `lineage-18.1-*.zip`) in the root directory for automatic ADB sideloading.
+    - **ROM Files**: Either provide `system.img`, `vendor.img`, and `boot.img` in `DATA\`, **OR** place a LineageOS flashable zip (e.g., `lineage-18.1-*.zip`) in the root directory for automatic ADB sideloading.
+    - **Optional GApps**: Place an ARM64 Android 11 GApps flashable zip (e.g., `MindTheGapps-11.0.0-arm64-*.zip`, `open_gapps-arm64-11.0-*.zip`, or any `*gapps*.zip`) in the root directory or `DATA\`. The installer will automatically detect it and offer to flash it right after LineageOS!
 3. **Reboot to Mass Storage Mode**:
    - Force reboot your phone (Hold **Power + Volume Down** for ~10 seconds until it vibrates).
    - Immediately press and hold the **Camera** button (or **Volume Up** on some builds) to enter the Developer Menu.
@@ -23,7 +24,7 @@ Automated scripts (Windows Batch and Linux Bash) to install Developer Menu, boot
 4. **Run the Installer**:
    - **Windows**: Right-click `installer.bat` and select **Run as Administrator**.
    - **Linux**: Make executable and run `installer.sh` (`chmod +x installer.sh && ./installer.sh`).
-5. **Select Phase**: Choose option `1` for a Full Install (or choose a specific phase to resume).
+5. **Select Phase**: Choose option `1` for a Full Install (or choose a specific phase to resume, including option `8` to flash GApps only).
 6. **Patch EFIESP**: When prompted, select the mounted `EFIESP` partition directory.
 7. **Reboot to LK2ND**: Unmount mass storage and force reboot the phone (hold Power + Vol Down). The screen will display LK text and proceed to LK2ND / TWRP.
 8. **Automated Steps**: The installer will automatically:
@@ -33,7 +34,8 @@ Automated scripts (Windows Batch and Linux Bash) to install Developer Menu, boot
    - Backup critical partitions (timestamped in `backup/`).
    - Flash TWRP recovery, modem firmware, and provision Android partitions.
    - Flash LineageOS images or ADB sideload the ROM zip.
-9. **Finish**: Once the process completes, the phone reboots straight into LineageOS!
+   - Flash the optional GApps package (if detected or confirmed) before first boot.
+9. **Finish**: Once the process completes, the phone reboots straight into LineageOS with Google services!
 
 ---
 
@@ -65,6 +67,7 @@ This repository includes several utility scripts to assist with ROM manipulation
 
 ## Recent Updates
 
+- **Optional GApps Flashing**: Automatically detects ARM64 Android 11 GApps packages (`MindTheGapps`, `OpenGApps`, `BiTGApps`, `*gapps*.zip`) and seamlessly flashes them right after ROM installation (before initial boot), or standalone via Phase 8.
 - **TWRP Recovery Kernel Updated**: Updated `DATA/twrp.img` with a newer kernel for enhanced stability, hardware support, and proper partitioning.
 - **Boot & Modem Images Updated**: Synchronized `DATA/boot.img` and `DATA/modem.img` with the latest kernel and firmware fixes.
 - **Vendor Partition Resized**: Increased the `vendor` partition from 260MiB to 384MiB in `partition.sh` to accommodate modern vendor builds without out-of-space errors.

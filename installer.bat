@@ -16,6 +16,7 @@
 ::    5. Flash TWRP recovery and modem firmware
 ::    6. Provision the Android partition layout
 ::    7. Flash LineageOS system/vendor imgs (or ADB sideload zip)
+::    8. (Optional) Flash GApps package (e.g. MindTheGapps/OpenGApps)
 ::
 ::  Requirements:
 ::    - Windows 10/11 with admin privileges
@@ -36,6 +37,7 @@
 ::    DATA\vendor.img        - LineageOS vendor image (Optional if sideloading zip)
 ::    DATA\boot.img          - LineageOS boot image (Optional if sideloading zip)
 ::    lineage-18.1-*.zip     - Flashable zip in script dir (Fallback if imgs are missing)
+::    *gapps*.zip            - (Optional) ARM64 Android 11 GApps zip in root or DATA\
 ::    partition.sh           - eMMC repartition script
 ::    provision.sh           - Android partition provisioning
 ::    ui\*                   - Developer menu UI assets
@@ -84,10 +86,12 @@ echo    4. Phone is in bootloader, flash recovery + modem
 echo    5. Recovery + modem flashed, run provisioning
 echo    6. Provisioning done, flash LineageOS images only
 echo    7. Rescue bootloop via Mass Storage Mode (Flash boot/recovery)
+echo    8. Flash GApps package only (via TWRP sideload)
 echo.
-set /p "start_phase=  Enter choice (1-7): "
+set /p "start_phase=  Enter choice (1-8): "
 
 if "!start_phase!"=="7" goto phase7_rescue
+if "!start_phase!"=="8" goto phase8_gapps
 
 REM ============================================================
 REM  Pre-flight checks: verify all required files exist
@@ -120,6 +124,31 @@ for %%F in (!data_files!) do (
         echo [ERROR] MISSING: DATA\%%F >> "%LOGFILE%"
         set "preflight_ok=0"
     )
+)
+
+REM -- Check for Optional GApps package --
+set "has_gapps=0"
+set "gapps_zip="
+set "gapps_name="
+for %%G in ("%~dp0*gapps*.zip" "%~dp0MindTheGapps*.zip" "%~dp0DATA\*gapps*.zip" "%~dp0DATA\MindTheGapps*.zip") do (
+    if "!has_gapps!"=="0" (
+        if exist "%%~fG" (
+            if /i "%%~fG" NEQ "!sideload_zip!" (
+                set "has_gapps=1"
+                set "gapps_zip=%%~fG"
+                set "gapps_name=%%~nxG"
+            )
+        )
+    )
+)
+
+if "!has_gapps!"=="1" (
+    echo [INFO] Optional GApps package found: !gapps_name!
+    echo [INFO] (GApps will be offered to flash right after LineageOS)
+    echo [INFO] Optional GApps package found: !gapps_zip! >> "%LOGFILE%"
+) else (
+    echo [INFO] No GApps package found (optional).
+    echo [INFO] No GApps package found >> "%LOGFILE%"
 )
 
 REM -- Required scripts --
@@ -164,6 +193,7 @@ if "!start_phase!"=="3" goto phase3_backup
 if "!start_phase!"=="4" goto phase4_flash
 if "!start_phase!"=="5" goto phase5_provision
 if "!start_phase!"=="6" goto phase6_lineageos
+if "!start_phase!"=="8" goto phase8_gapps
 
 REM ============================================================
 REM  PHASE 1: Patch EFIESP partition
@@ -535,72 +565,225 @@ if /i "!confirm_flash!" NEQ "Y" (
     exit /b 0
 )
 
-if "!use_sideload!"=="1" (
+:: Check for GApps confirmation if available or ask user
+set "do_flash_gapps=0"
+if "!has_gapps!"=="1" (
     echo.
+    echo  ============================================================
+    echo   Optional GApps package detected:
+    echo   !gapps_name!
+    echo  ============================================================
+    set /p "confirm_gapps=  Flash GApps right after LineageOS? (Y/N) [default: Y]: "
+    if /i "!confirm_gapps!"=="" set "confirm_gapps=Y"
+    if /i "!confirm_gapps!"=="Y" (
+        set "do_flash_gapps=1"
+        echo  [INFO] GApps will be flashed immediately after LineageOS.
+        echo [INFO] User confirmed GApps flashing: !gapps_zip! >> "%LOGFILE%"
+    ) else (
+        echo  [INFO] Skipping GApps flashing.
+        echo [INFO] User skipped GApps flashing >> "%LOGFILE%"
+    )
+) else (
+    echo.
+    set /p "ask_gapps=  Do you want to flash a GApps package after LineageOS? (Y/N) [default: N]: "
+    if /i "!ask_gapps!"=="Y" (
+        set /p "user_gapps_path=  Enter path to GApps zip file: "
+        if exist "!user_gapps_path!" (
+            set "has_gapps=1"
+            set "do_flash_gapps=1"
+            set "gapps_zip=!user_gapps_path!"
+            for %%A in ("!user_gapps_path!") do set "gapps_name=%%~nxA"
+            echo  [OK] Loaded GApps: !gapps_name!
+            echo [INFO] User provided custom GApps: !gapps_zip! >> "%LOGFILE%"
+        ) else (
+            echo  [WARNING] File '!user_gapps_path!' not found. Skipping GApps.
+        )
+    )
+)
+
+if "!use_sideload!"=="1" goto phase6_sideload_flow
+goto phase6_fastboot_flow
+
+:phase6_sideload_flow
+echo.
+set "sideload_found=0"
+for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+    if "%%i"=="sideload" set "sideload_found=1"
+)
+if "!sideload_found!"=="1" (
+    echo Device is already in sideload mode.
+) else (
+    echo Starting TWRP sideload mode...
+    %~dp0bin\adb shell twrp sideload >nul 2>&1
+    
+    echo.
+    echo Waiting for device to enter sideload mode...
+    :waitsideload
+    timeout /t 5 /nobreak >nul
     set "sideload_found=0"
     for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
         if "%%i"=="sideload" set "sideload_found=1"
     )
-    if "!sideload_found!"=="1" (
-        echo Device is already in sideload mode.
-    ) else (
-        echo Starting TWRP sideload mode...
-        %~dp0bin\adb shell twrp sideload >nul 2>&1
-        
-        echo.
-        echo Waiting for device to enter sideload mode...
-        :waitsideload
-        timeout /t 5 /nobreak >nul
-        set "sideload_found=0"
-        for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
-            if "%%i"=="sideload" set "sideload_found=1"
-        )
-        if "!sideload_found!"=="0" (
-            echo   Device not in sideload mode yet.
-            echo   If it's stuck, please manually start ADB Sideload from TWRP Advanced menu!
-            goto waitsideload
-        )
-        echo [OK] Device is in sideload mode!
+    if "!sideload_found!"=="0" (
+        echo   Device not in sideload mode yet.
+        echo   If it's stuck, please manually start ADB Sideload from TWRP Advanced menu!
+        goto waitsideload
     )
-
-    echo Sideloading LineageOS zip ^(this will take a while^)...
-    %~dp0bin\adb sideload "!sideload_zip!"
-    echo [INFO] Sideloaded !sideload_zip! >> "%LOGFILE%"
-    
-) else (
-    echo Rebooting to bootloader for flashing system/vendor...
-    %~dp0bin\adb reboot bootloader
-
-    echo.
-    echo Waiting for device in fastboot/bootloader mode...
-    echo.
-
-    :waitfb2
-    %~dp0bin\fastboot devices 2>nul | findstr /R /C:"fastboot" >nul 2>&1
-    IF ERRORLEVEL 1 (
-        echo   Fastboot device not found, retrying in 5 seconds...
-        timeout /t 5 /nobreak >nul
-        goto waitfb2
-    )
-    echo [OK] Fastboot device detected!
-    echo [INFO] Fastboot device detected for Phase 6 >> "%LOGFILE%"
-
-    echo Flashing system.img ^(this may take a while^)...
-    %~dp0bin\fastboot flash system "%~dp0DATA\system.img"
-    echo [INFO] system.img flash command sent >> "%LOGFILE%"
-
-    echo Flashing vendor.img...
-    %~dp0bin\fastboot flash vendor "%~dp0DATA\vendor.img"
-    echo [INFO] vendor.img flash command sent >> "%LOGFILE%"
-
-    echo Flashing boot.img...
-    %~dp0bin\fastboot flash boot "%~dp0DATA\boot.img"
-    echo [INFO] boot.img flash command sent >> "%LOGFILE%"
+    echo [OK] Device is in sideload mode!
 )
 
-echo Rebooting device
-%~dp0bin\adb reboot 
+echo Sideloading LineageOS zip ^(this will take a while^)...
+%~dp0bin\adb sideload "!sideload_zip!"
+IF ERRORLEVEL 1 (
+    echo  [ERROR] Sideloading LineageOS failed!
+    echo [ERROR] Sideloading LineageOS failed >> "%LOGFILE%"
+    pause
+    exit /b 1
+)
+echo [INFO] Sideloaded !sideload_zip! >> "%LOGFILE%"
+
+if "!do_flash_gapps!"=="1" (
+    echo.
+    echo  ============================================================
+    echo   Flashing Optional GApps: !gapps_name!
+    echo  ============================================================
+    echo Waiting for TWRP to finish and return to recovery...
+    timeout /t 5 /nobreak >nul
+
+    :: Check if device is in sideload mode or needs to re-enter sideload mode
+    set "gapps_sideload_ready=0"
+    for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+        if "%%i"=="sideload" set "gapps_sideload_ready=1"
+    )
+    if "!gapps_sideload_ready!"=="0" (
+        echo Putting TWRP back into sideload mode for GApps...
+        %~dp0bin\adb shell twrp sideload >nul 2>&1
+
+        echo Waiting for device to re-enter sideload mode...
+        :waitgappssideload1
+        timeout /t 5 /nobreak >nul
+        set "gapps_sideload_ready=0"
+        for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+            if "%%i"=="sideload" set "gapps_sideload_ready=1"
+        )
+        if "!gapps_sideload_ready!"=="0" (
+            echo   Device not in sideload mode yet.
+            echo   Please manually tap Advanced -^> ADB Sideload in TWRP if prompted!
+            goto waitgappssideload1
+        )
+    )
+    echo [OK] Device is in sideload mode for GApps!
+
+    echo Sideloading GApps package ^(this will take a moment^)...
+    %~dp0bin\adb sideload "!gapps_zip!"
+    IF ERRORLEVEL 1 (
+        echo  [WARNING] Sideloading GApps returned a warning or error.
+        echo            Please check the device screen for details.
+        echo [WARNING] Sideloading GApps returned error >> "%LOGFILE%"
+    ) else (
+        echo [OK] GApps package flashed successfully!
+        echo [INFO] Sideloaded GApps !gapps_zip! >> "%LOGFILE%"
+    )
+)
+
+echo.
+echo Rebooting device...
+timeout /t 3 /nobreak >nul
+%~dp0bin\adb reboot
 goto done_installation
+
+:phase6_fastboot_flow
+echo Rebooting to bootloader for flashing system/vendor...
+%~dp0bin\adb reboot bootloader
+
+echo.
+echo Waiting for device in fastboot/bootloader mode...
+echo.
+
+:waitfb2
+%~dp0bin\fastboot devices 2>nul | findstr /R /C:"fastboot" >nul 2>&1
+IF ERRORLEVEL 1 (
+    echo   Fastboot device not found, retrying in 5 seconds...
+    timeout /t 5 /nobreak >nul
+    goto waitfb2
+)
+echo [OK] Fastboot device detected!
+echo [INFO] Fastboot device detected for Phase 6 >> "%LOGFILE%"
+
+echo Flashing system.img ^(this may take a while^)...
+%~dp0bin\fastboot flash system "%~dp0DATA\system.img"
+echo [INFO] system.img flash command sent >> "%LOGFILE%"
+
+echo Flashing vendor.img...
+%~dp0bin\fastboot flash vendor "%~dp0DATA\vendor.img"
+echo [INFO] vendor.img flash command sent >> "%LOGFILE%"
+
+echo Flashing boot.img...
+%~dp0bin\fastboot flash boot "%~dp0DATA\boot.img"
+echo [INFO] boot.img flash command sent >> "%LOGFILE%"
+
+if "!do_flash_gapps!"=="1" (
+    echo.
+    echo  ============================================================
+    echo   Flashing Optional GApps: !gapps_name!
+    echo  ============================================================
+    echo Rebooting device into TWRP recovery to flash GApps...
+    %~dp0bin\fastboot reboot recovery
+
+    echo Waiting for device in ADB recovery mode...
+    :waitrecgapps
+    timeout /t 5 /nobreak >nul
+    set "rec_found=0"
+    for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+        if "%%i"=="recovery" set "rec_found=1"
+        if "%%i"=="device" set "rec_found=1"
+        if "%%i"=="sideload" set "rec_found=1"
+    )
+    if "!rec_found!"=="0" (
+        echo   Waiting for TWRP Recovery to boot...
+        goto waitrecgapps
+    )
+    echo [OK] Device is in TWRP recovery!
+
+    echo Starting TWRP sideload mode for GApps...
+    %~dp0bin\adb shell twrp sideload >nul 2>&1
+
+    echo Waiting for device to enter sideload mode...
+    :waitgappssideload2
+    timeout /t 5 /nobreak >nul
+    set "gapps_sideload_ready=0"
+    for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+        if "%%i"=="sideload" set "gapps_sideload_ready=1"
+    )
+    if "!gapps_sideload_ready!"=="0" (
+        echo   Device not in sideload mode yet.
+        echo   Please manually tap Advanced -^> ADB Sideload in TWRP if prompted!
+        goto waitgappssideload2
+    )
+    echo [OK] Device is in sideload mode for GApps!
+
+    echo Sideloading GApps package ^(this will take a moment^)...
+    %~dp0bin\adb sideload "!gapps_zip!"
+    IF ERRORLEVEL 1 (
+        echo  [WARNING] Sideloading GApps returned a warning or error.
+        echo            Please check the device screen for details.
+        echo [WARNING] Sideloading GApps returned error >> "%LOGFILE%"
+    ) else (
+        echo [OK] GApps package flashed successfully!
+        echo [INFO] Sideloaded GApps !gapps_zip! >> "%LOGFILE%"
+    )
+
+    echo.
+    echo Rebooting device...
+    timeout /t 3 /nobreak >nul
+    %~dp0bin\adb reboot
+    goto done_installation
+) else (
+    echo.
+    echo Rebooting device...
+    %~dp0bin\fastboot reboot
+    goto done_installation
+)
 
 REM ============================================================
 REM  PHASE 7: Rescue Bootloop (Mass Storage Mode)
@@ -637,6 +820,92 @@ PowerShell -NoProfile -ExecutionPolicy Bypass -File "%~dp0rescue.ps1" -ImageName
 
 echo.
 echo Rescue operation finished. Check the PowerShell window for success/failure.
+pause
+exit /b 0
+
+REM ============================================================
+REM  PHASE 8: Flash GApps package only (via TWRP sideload)
+REM ============================================================
+:phase8_gapps
+echo.
+echo  --- PHASE 8: Flash GApps package only ---
+echo.
+echo  Make sure your Lumia 950 XL is currently booted into TWRP Recovery!
+echo.
+
+if "!has_gapps!"=="0" (
+    echo No GApps package automatically detected in installer directory.
+    set /p "user_gapps_path=  Enter path to GApps zip file: "
+    if exist "!user_gapps_path!" (
+        set "has_gapps=1"
+        set "gapps_zip=!user_gapps_path!"
+        for %%A in ("!user_gapps_path!") do set "gapps_name=%%~nxA"
+    ) else (
+        echo  [ERROR] File '!user_gapps_path!' not found. Aborting.
+        pause
+        exit /b 1
+    )
+)
+
+echo Package to flash: !gapps_name!
+echo.
+set /p "confirm_p8=  Continue flashing GApps? (Y/N): "
+if /i "!confirm_p8!" NEQ "Y" (
+    echo Operation cancelled by user.
+    exit /b 0
+)
+
+echo.
+echo Checking for ADB device...
+:waitp8adb
+set "p8_mode=none"
+for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+    if "%%i"=="sideload" set "p8_mode=sideload"
+    if "%%i"=="recovery" set "p8_mode=recovery"
+    if "%%i"=="device" set "p8_mode=recovery"
+)
+
+if "!p8_mode!"=="none" (
+    echo   Device not detected in ADB. Please ensure phone is connected in TWRP. Retrying in 5s...
+    timeout /t 5 /nobreak >nul
+    goto waitp8adb
+)
+
+if "!p8_mode!"=="recovery" (
+    echo Starting TWRP sideload mode...
+    %~dp0bin\adb shell twrp sideload >nul 2>&1
+    :waitp8sideload
+    timeout /t 5 /nobreak >nul
+    set "p8_mode=none"
+    for /f "tokens=2" %%i in ('%~dp0bin\adb devices') do (
+        if "%%i"=="sideload" set "p8_mode=sideload"
+    )
+    if "!p8_mode!" NEQ "sideload" (
+        echo   Waiting for sideload mode... Please tap Advanced -^> ADB Sideload in TWRP if prompted!
+        goto waitp8sideload
+    )
+)
+echo [OK] Device is in sideload mode!
+
+echo Sideloading !gapps_name!...
+%~dp0bin\adb sideload "!gapps_zip!"
+IF ERRORLEVEL 1 (
+    echo  [WARNING] Sideloading GApps completed with errors or warnings.
+    echo [WARNING] Phase 8 GApps sideload error >> "%LOGFILE%"
+) else (
+    echo [OK] GApps flashed successfully!
+    echo [INFO] Phase 8 GApps sideloaded successfully >> "%LOGFILE%"
+)
+
+echo.
+set /p "reboot_p8=  Reboot device to system now? (Y/N) [default: Y]: "
+if /i "!reboot_p8!"=="" set "reboot_p8=Y"
+if /i "!reboot_p8!"=="Y" (
+    timeout /t 3 /nobreak >nul
+    %~dp0bin\adb reboot
+)
+echo.
+echo GApps installation phase finished.
 pause
 exit /b 0
 

@@ -17,6 +17,7 @@
 #    5. Flash TWRP recovery and modem firmware
 #    6. Provision the Android partition layout
 #    7. Flash LineageOS system/vendor imgs (or ADB sideload zip)
+#    8. (Optional) Flash GApps package (e.g. MindTheGapps/OpenGApps)
 #
 #  Requirements:
 #    - Ubuntu 24.04 (or other Linux) with root privileges
@@ -103,6 +104,31 @@ for f in "${data_files[@]}"; do
     fi
 done
 
+# -- Check for Optional GApps package --
+has_gapps=0
+gapps_zip=""
+gapps_name=""
+
+shopt -s nocaseglob nullglob
+for g in "${BASE_DIR}"/*gapps*.zip "${BASE_DIR}/DATA"/*gapps*.zip "${BASE_DIR}"/MindTheGapps*.zip "${BASE_DIR}/DATA"/MindTheGapps*.zip; do
+    if [ -f "$g" ] && [ "$g" != "$sideload_zip" ]; then
+        has_gapps=1
+        gapps_zip="$g"
+        gapps_name="$(basename "$g")"
+        break
+    fi
+done
+shopt -u nocaseglob nullglob
+
+if [ "$has_gapps" -eq 1 ]; then
+    echo "[INFO] Optional GApps package found: $gapps_name"
+    echo "[INFO] (GApps will be offered to flash right after LineageOS)"
+    echo "[INFO] Optional GApps package found: $gapps_zip" >> "$LOGFILE"
+else
+    echo "[INFO] No GApps package found (optional)."
+    echo "[INFO] No GApps package found" >> "$LOGFILE"
+fi
+
 # -- Required scripts --
 for f in "partition.sh" "provision.sh"; do
     if [ ! -f "${BASE_DIR}/$f" ]; then
@@ -157,8 +183,9 @@ echo "   4. Phone is in bootloader, flash recovery + modem"
 echo "   5. Recovery + modem flashed, run provisioning"
 echo "   6. Provisioning done, flash LineageOS images only"
 echo "   7. Rescue bootloop via Mass Storage Mode (Flash boot/recovery)"
+echo "   8. Flash GApps package only (via TWRP sideload)"
 echo ""
-read -p "  Enter choice (1-7): " start_phase
+read -p "  Enter choice (1-8): " start_phase
 
 # ============================================================
 #  Phases
@@ -474,6 +501,41 @@ phase6_lineageos() {
         exit 0
     fi
 
+    # Check for GApps confirmation if available or ask user
+    do_flash_gapps=0
+    if [ "$has_gapps" -eq 1 ]; then
+        echo ""
+        echo " ============================================================"
+        echo "  Optional GApps package detected:"
+        echo "  $gapps_name"
+        echo " ============================================================"
+        read -p "  Flash GApps right after LineageOS? (Y/N) [default: Y]: " confirm_gapps
+        if [ -z "$confirm_gapps" ] || [[ "$confirm_gapps" =~ ^[Yy]$ ]]; then
+            do_flash_gapps=1
+            echo " [INFO] GApps will be flashed immediately after LineageOS."
+            echo "[INFO] User confirmed GApps flashing: $gapps_zip" >> "$LOGFILE"
+        else
+            echo " [INFO] Skipping GApps flashing."
+            echo "[INFO] User skipped GApps flashing" >> "$LOGFILE"
+        fi
+    else
+        echo ""
+        read -p "  Do you want to flash a GApps package after LineageOS? (Y/N) [default: N]: " ask_gapps
+        if [[ "$ask_gapps" =~ ^[Yy]$ ]]; then
+            read -p "  Enter path to GApps zip file: " user_gapps_path
+            if [ -f "$user_gapps_path" ]; then
+                has_gapps=1
+                do_flash_gapps=1
+                gapps_zip="$user_gapps_path"
+                gapps_name="$(basename "$user_gapps_path")"
+                echo " [OK] Loaded GApps: $gapps_name"
+                echo "[INFO] User provided custom GApps: $gapps_zip" >> "$LOGFILE"
+            else
+                echo " [WARNING] File '$user_gapps_path' not found. Skipping GApps."
+            fi
+        fi
+    fi
+
     if [ "$use_sideload" -eq 1 ]; then
         echo ""
         sideload_found=0
@@ -502,9 +564,52 @@ phase6_lineageos() {
 
         echo "Sideloading LineageOS zip (this will take a while)..."
         $ADB sideload "$sideload_zip"
+        if [ $? -ne 0 ]; then
+            echo " [ERROR] Sideloading LineageOS failed!"
+            echo "[ERROR] Sideloading LineageOS failed" >> "$LOGFILE"
+            read -p "Press Enter to exit..."
+            exit 1
+        fi
         echo "[INFO] Sideloaded $sideload_zip" >> "$LOGFILE"
 
-        echo "Rebooting device"
+        if [ "$do_flash_gapps" -eq 1 ]; then
+            echo ""
+            echo " ============================================================"
+            echo "  Flashing Optional GApps: $gapps_name"
+            echo " ============================================================"
+            echo "Waiting for TWRP to finish and return to recovery..."
+            sleep 5
+
+            if ! $ADB devices | grep -q "sideload"; then
+                echo "Putting TWRP back into sideload mode for GApps..."
+                $ADB shell twrp sideload >/dev/null 2>&1
+
+                echo "Waiting for device to re-enter sideload mode..."
+                while true; do
+                    sleep 5
+                    if $ADB devices | grep -q "sideload"; then
+                        break
+                    fi
+                    echo "  Device not in sideload mode yet. Please tap Advanced -> ADB Sideload in TWRP if prompted!"
+                done
+            fi
+            echo "[OK] Device is in sideload mode for GApps!"
+
+            echo "Sideloading GApps package (this will take a moment)..."
+            $ADB sideload "$gapps_zip"
+            if [ $? -ne 0 ]; then
+                echo " [WARNING] Sideloading GApps returned a warning or error."
+                echo "           Please check the device screen for details."
+                echo "[WARNING] Sideloading GApps returned error" >> "$LOGFILE"
+            else
+                echo "[OK] GApps package flashed successfully!"
+                echo "[INFO] Sideloaded GApps $gapps_zip" >> "$LOGFILE"
+            fi
+        fi
+
+        echo ""
+        echo "Rebooting device..."
+        sleep 3
         $ADB reboot
     else
         echo "Rebooting to bootloader for flashing"
@@ -537,8 +642,63 @@ phase6_lineageos() {
         $FASTBOOT flash boot "${BASE_DIR}/DATA/boot.img"
         echo "[INFO] boot.img flash command sent" >> "$LOGFILE"
 
-        echo "Rebooting device"
-        $FASTBOOT reboot
+        if [ "$do_flash_gapps" -eq 1 ]; then
+            echo ""
+            echo " ============================================================"
+            echo "  Flashing Optional GApps: $gapps_name"
+            echo " ============================================================"
+            echo "Rebooting device into TWRP recovery to flash GApps..."
+            $FASTBOOT reboot recovery
+
+            echo "Waiting for device in ADB recovery mode..."
+            while true; do
+                sleep 5
+                rec_found=0
+                for state in $($ADB devices | awk 'NR>1 {print $2}'); do
+                    if [ "$state" == "recovery" ] || [ "$state" == "device" ] || [ "$state" == "sideload" ]; then
+                        rec_found=1
+                        break
+                    fi
+                done
+                if [ "$rec_found" -eq 1 ]; then
+                    break
+                fi
+                echo "  Waiting for TWRP Recovery to boot..."
+            done
+            echo "[OK] Device is in TWRP recovery!"
+
+            echo "Starting TWRP sideload mode for GApps..."
+            $ADB shell twrp sideload >/dev/null 2>&1
+
+            echo "Waiting for device to enter sideload mode..."
+            while true; do
+                sleep 5
+                if $ADB devices | grep -q "sideload"; then
+                    break
+                fi
+                echo "  Device not in sideload mode yet. Please tap Advanced -> ADB Sideload in TWRP if prompted!"
+            done
+            echo "[OK] Device is in sideload mode for GApps!"
+
+            echo "Sideloading GApps package (this will take a moment)..."
+            $ADB sideload "$gapps_zip"
+            if [ $? -ne 0 ]; then
+                echo " [WARNING] Sideloading GApps returned a warning or error."
+                echo "           Please check the device screen for details."
+                echo "[WARNING] Sideloading GApps returned error" >> "$LOGFILE"
+            else
+                echo "[OK] GApps package flashed successfully!"
+                echo "[INFO] Sideloaded GApps $gapps_zip" >> "$LOGFILE"
+            fi
+
+            echo ""
+            echo "Rebooting device..."
+            sleep 3
+            $ADB reboot
+        else
+            echo "Rebooting device"
+            $FASTBOOT reboot
+        fi
     fi
 }
 
@@ -573,6 +733,88 @@ phase7_rescue() {
 
     echo ""
     echo "Rescue operation finished. Check the output above for success/failure."
+    exit 0
+}
+
+phase8_gapps() {
+    echo ""
+    echo " --- PHASE 8: Flash GApps package only ---"
+    echo ""
+    echo " Make sure your Lumia 950 XL is currently booted into TWRP Recovery!"
+    echo ""
+
+    if [ "$has_gapps" -eq 0 ]; then
+        echo "No GApps package automatically detected in installer directory."
+        read -p "  Enter path to GApps zip file: " user_gapps_path
+        if [ -f "$user_gapps_path" ]; then
+            has_gapps=1
+            gapps_zip="$user_gapps_path"
+            gapps_name="$(basename "$user_gapps_path")"
+        else
+            echo " [ERROR] File '$user_gapps_path' not found. Aborting."
+            exit 1
+        fi
+    fi
+
+    echo "Package to flash: $gapps_name"
+    echo ""
+    read -p "  Continue flashing GApps? (Y/N): " confirm_p8
+    if [[ ! "$confirm_p8" =~ ^[Yy]$ ]]; then
+        echo "Operation cancelled by user."
+        exit 0
+    fi
+
+    echo ""
+    echo "Checking for ADB device..."
+    while true; do
+        p8_mode="none"
+        for state in $($ADB devices | awk 'NR>1 {print $2}'); do
+            if [ "$state" == "sideload" ]; then p8_mode="sideload"; break; fi
+            if [ "$state" == "recovery" ] || [ "$state" == "device" ]; then p8_mode="recovery"; break; fi
+        done
+
+        if [ "$p8_mode" != "none" ]; then
+            break
+        fi
+        echo "  Device not detected in ADB. Please ensure phone is connected in TWRP. Retrying in 5s..."
+        sleep 5
+    done
+
+    if [ "$p8_mode" == "recovery" ]; then
+        echo "Starting TWRP sideload mode..."
+        $ADB shell twrp sideload >/dev/null 2>&1
+        while true; do
+            sleep 5
+            p8_mode="none"
+            for state in $($ADB devices | awk 'NR>1 {print $2}'); do
+                if [ "$state" == "sideload" ]; then p8_mode="sideload"; break; fi
+            done
+            if [ "$p8_mode" == "sideload" ]; then
+                break
+            fi
+            echo "  Waiting for sideload mode... Please tap Advanced -> ADB Sideload in TWRP if prompted!"
+        done
+    fi
+    echo "[OK] Device is in sideload mode!"
+
+    echo "Sideloading $gapps_name..."
+    $ADB sideload "$gapps_zip"
+    if [ $? -ne 0 ]; then
+        echo " [WARNING] Sideloading GApps completed with errors or warnings."
+        echo "[WARNING] Phase 8 GApps sideload error" >> "$LOGFILE"
+    else
+        echo "[OK] GApps flashed successfully!"
+        echo "[INFO] Phase 8 GApps sideloaded successfully" >> "$LOGFILE"
+    fi
+
+    echo ""
+    read -p "  Reboot device to system now? (Y/N) [default: Y]: " reboot_p8
+    if [ -z "$reboot_p8" ] || [[ "$reboot_p8" =~ ^[Yy]$ ]]; then
+        sleep 3
+        $ADB reboot
+    fi
+    echo ""
+    echo "GApps installation phase finished."
     exit 0
 }
 
@@ -615,6 +857,9 @@ case "$start_phase" in
         ;;
     7)
         phase7_rescue
+        ;;
+    8)
+        phase8_gapps
         ;;
     *)
         echo "Invalid choice. Exiting."

@@ -1,3 +1,5 @@
 backup/
 modem_firmware/
 install_log_*.txt
+lineage-*.zip
+*gapps*.zip
